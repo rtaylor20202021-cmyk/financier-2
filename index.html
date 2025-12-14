@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Pocket Tycoon – Idle Decisions (Lifestyle+)</title>
+  <style>
+    :root{
+      --bg:#070a10; --panel:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
+      --text:#eaf2ff; --muted:rgba(234,242,255,.75);
+      --accent:#2f7cff; --accent2:#6a5cff; --danger:#ff3b3b; --good:#33d17a;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;overflow:hidden}
+    canvas{position:fixed;inset:0;width:100vw;height:100vh;z-index:0}
+    .app{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column}
+    .topbar{
+      display:flex;gap:10px;align-items:center;justify-content:space-between;
+      padding:12px 12px 10px;border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      backdrop-filter: blur(8px);
+    }
+    .pill{display:flex;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);
+      border-radius:999px;background:var(--panel)}
+    .kpi{display:flex;flex-direction:column;line-height:1.1}
+    .kpi b{font-size:14px}
+    .kpi span{font-size:12px;color:var(--muted)}
+    .tabs{display:flex;gap:8px; padding:10px 12px; flex-wrap:wrap}
+    .tab{border:1px solid var(--line); background:var(--panel); color:var(--text);
+      padding:8px 10px; border-radius:12px; font-weight:800; font-size:13px}
+    .tab.active{background:linear-gradient(135deg, rgba(47,124,255,.25), rgba(106,92,255,.18));
+      border-color:rgba(47,124,255,.35)}
+    .content{flex:1; overflow:auto; padding:0 12px 14px}
+    .card{border:1px solid var(--line); background:var(--panel); border-radius:16px; padding:12px; margin:10px 0}
+    .row{display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap}
+    .muted{color:var(--muted); font-size:12px}
+    .big{font-size:18px;font-weight:900}
+    .btn{
+      border:0; border-radius:12px; padding:10px 12px; font-weight:900;
+      background:linear-gradient(135deg,var(--accent),var(--accent2)); color:white;
+    }
+    .btn.ghost{background:transparent;border:1px solid var(--line); color:var(--text)}
+    .btn.danger{background:linear-gradient(135deg,#ff3b3b,#ff7a3b)}
+    .btn.good{background:linear-gradient(135deg,#33d17a,#2f7cff)}
+    .btn:disabled{opacity:.45}
+    .list{display:flex;flex-direction:column;gap:10px}
+    .item{border:1px solid var(--line);border-radius:14px;padding:12px;background:rgba(0,0,0,.12)}
+    .item h3{margin:0 0 6px 0;font-size:14px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr; gap:10px}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr; gap:8px}
+    .badge{display:inline-flex;gap:6px;align-items:center;padding:4px 8px;border-radius:999px;border:1px solid var(--line);
+      background:rgba(255,255,255,.05);font-size:12px;color:var(--muted)}
+    .bar{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid rgba(255,255,255,.10)}
+    .bar > div{height:100%;background:linear-gradient(90deg,var(--good),var(--accent))}
+    .toast{
+      position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+      background:rgba(9,12,18,.86); border:1px solid var(--line);
+      padding:10px 12px; border-radius:14px; display:none; z-index:9;
+      max-width:min(520px, 92vw); color:var(--text); font-weight:700; font-size:13px;
+    }
+    .sep{opacity:.5}
+  </style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+
+  <div class="app">
+    <div class="topbar">
+      <div class="pill">
+        <div class="kpi"><b id="money">$0</b><span>Cash</span></div>
+        <div class="kpi"><b id="net">$0</b><span>Net Worth</span></div>
+        <div class="kpi"><b id="rate">$0/s</b><span>Net income</span></div>
+        <div class="kpi"><b id="qol">50</b><span>QoL</span></div>
+      </div>
+      <button class="btn ghost" id="saveBtn">Save</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="business">Businesses</button>
+      <button class="tab" data-tab="lifestyle">Lifestyle</button>
+      <button class="tab" data-tab="finance">Finance</button>
+      <button class="tab" data-tab="reports">Reports</button>
+    </div>
+
+    <div class="content">
+      <div id="tab-overview" class="tabpane"></div>
+      <div id="tab-business" class="tabpane" style="display:none"></div>
+      <div id="tab-lifestyle" class="tabpane" style="display:none"></div>
+      <div id="tab-finance" class="tabpane" style="display:none"></div>
+      <div id="tab-reports" class="tabpane" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  // ----- Background (stars) -----
+  const bg = document.getElementById("bg");
+  const bctx = bg.getContext("2d");
+  let W=innerWidth, H=innerHeight, DPR=1, stars=[];
+  function resize(){
+    DPR = Math.max(1, Math.min(2, devicePixelRatio||1));
+    W=innerWidth; H=innerHeight;
+    bg.width=(W*DPR)|0; bg.height=(H*DPR)|0;
+    bctx.setTransform(DPR,0,0,DPR,0,0);
+    stars=[];
+    for(let L=0; L<3; L++){
+      const count=Math.floor((W*H)/(L===0?12000:L===1?17000:26000))+50;
+      for(let i=0;i<count;i++){
+        stars.push({
+          x:Math.random()*W,y:Math.random()*H,
+          r:(L===0?1.6:L===1?1.2:0.9)*(0.6+Math.random()),
+          v:(L===0?22:L===1?12:7)*(0.7+Math.random()),
+          a:(L===0?0.5:L===1?0.35:0.25)*(0.6+Math.random()),
+          L
+        });
+      }
+    }
+  }
+  addEventListener("resize", resize, {passive:true});
+  resize();
+
+  function drawBG(dt){
+    bctx.fillStyle="rgba(7,10,16,0.25)";
+    bctx.fillRect(0,0,W,H);
+
+    const g1=bctx.createRadialGradient(W*0.25,H*0.3,10,W*0.25,H*0.3,Math.max(W,H)*0.8);
+    g1.addColorStop(0,"rgba(47,124,255,0.10)"); g1.addColorStop(1,"rgba(0,0,0,0)");
+    bctx.fillStyle=g1; bctx.fillRect(0,0,W,H);
+
+    const g2=bctx.createRadialGradient(W*0.8,H*0.65,10,W*0.8,H*0.65,Math.max(W,H)*0.85);
+    g2.addColorStop(0,"rgba(106,92,255,0.08)"); g2.addColorStop(1,"rgba(0,0,0,0)");
+    bctx.fillStyle=g2; bctx.fillRect(0,0,W,H);
+
+    for(const s of stars){
+      s.y += s.v*dt;
+      if(s.y>H+10){s.y=-10; s.x=Math.random()*W;}
+      bctx.globalAlpha=s.a;
+      bctx.beginPath(); bctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      bctx.fillStyle="white"; bctx.fill();
+    }
+    bctx.globalAlpha=1;
+  }
+
+  // ----- Utils -----
+  const fmt = new Intl.NumberFormat(undefined,{notation:"compact",compactDisplay:"short",maximumFractionDigits:2});
+  const moneyFmt = n => "$"+fmt.format(Math.max(0, n));
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const now=()=>Date.now();
+
+  // ----- Larger Lifestyle Catalog -----
+  // upkeepPerSec: ongoing bills/subscriptions/maintenance
+  // value & annualRate: assets appreciate (+) or depreciate (-)
+  // consumable: if true, no resale value; cancelable: if true and upkeep>0, you can cancel to stop upkeep
+  const LIFESTYLE = [
+    // Gadgets
+    { id:"earbuds", type:"Gadget", name:"Wireless Earbuds", cost:60, upkeepPerSec:0.00, value:35, annualRate:-0.30, qol:+3, rep:+0, risk:+0 },
+    { id:"phone", type:"Gadget", name:"Smartphone Upgrade", cost:180, upkeepPerSec:0.00, value:120, annualRate:-0.30, qol:+6, rep:+1, risk:+0 },
+    { id:"laptop",type:"Gadget", name:"Work Laptop", cost:420, upkeepPerSec:0.00, value:300, annualRate:-0.25, qol:+8, rep:+2, risk:-1 },
+    { id:"tablet",type:"Ga
